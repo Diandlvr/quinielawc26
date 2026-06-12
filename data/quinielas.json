@@ -1,0 +1,296 @@
+{
+  "Prueba": {
+    "marcadores": {
+      "G-A-mx-za": {
+        "local": 1,
+        "visitante": null
+      },
+      "G-A-mx-kr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-A-mx-cz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-A-za-kr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-A-za-cz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-A-kr-cz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-ca-ba": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-ca-qa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-ca-ch": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-ba-qa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-ba-ch": {
+        "local": null,
+        "visitante": null
+      },
+      "G-B-qa-ch": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-br-ma": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-br-ht": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-br-gb-sct": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-ma-ht": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-ma-gb-sct": {
+        "local": null,
+        "visitante": null
+      },
+      "G-C-ht-gb-sct": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-us-py": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-us-au": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-us-tr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-py-au": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-py-tr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-D-au-tr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-de-cw": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-de-ci": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-de-ec": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-cw-ci": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-cw-ec": {
+        "local": null,
+        "visitante": null
+      },
+      "G-E-ci-ec": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-nl-jp": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-nl-se": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-nl-tn": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-jp-se": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-jp-tn": {
+        "local": null,
+        "visitante": null
+      },
+      "G-F-se-tn": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-be-eg": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-be-ir": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-be-nz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-eg-ir": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-eg-nz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-G-ir-nz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-es-cv": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-es-sa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-es-uy": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-cv-sa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-cv-uy": {
+        "local": null,
+        "visitante": null
+      },
+      "G-H-sa-uy": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-fr-sn": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-fr-iq": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-fr-no": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-sn-iq": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-sn-no": {
+        "local": null,
+        "visitante": null
+      },
+      "G-I-iq-no": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-ar-dz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-ar-at": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-ar-jo": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-dz-at": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-dz-jo": {
+        "local": null,
+        "visitante": null
+      },
+      "G-J-at-jo": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-pt-cd": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-pt-uz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-pt-co": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-cd-uz": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-cd-co": {
+        "local": null,
+        "visitante": null
+      },
+      "G-K-uz-co": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-gb-eng-hr": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-gb-eng-gh": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-gb-eng-pa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-hr-gh": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-hr-pa": {
+        "local": null,
+        "visitante": null
+      },
+      "G-L-gh-pa": {
+        "local": null,
+        "visitante": null
+      }
+    },
+    "eliminatorias": {},
+    "actualizado": "2026-06-12T17:37:29.697Z"
+  }
+}
