@@ -1420,23 +1420,87 @@ html[data-tema="oscuro"] .panel-pin h2 { color: var(--c-amarillo); }
 /* ================================================================
    AJUSTES MOBILE
 ================================================================ */
+
+/* Touch targets: steppers */
+.stepper-btn  { min-width: 36px; min-height: 40px; }
+.stepper-input { min-height: 40px; width: 40px; }
+
+/* Safe area insets (iOS notch / home bar) */
+.cabecera { padding-top: max(16px, env(safe-area-inset-top)); }
+.toast {
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 12px));
+}
+.admin-guardar-flotante {
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px));
+  right:  max(20px, env(safe-area-inset-right));
+}
+
 @media (max-width: 640px) {
-  .logo { font-size: 22px; }
-  .vista { padding: 14px; }
+  /* Header: solo iconos en los botones de acción */
+  .acciones .btn-texto { display: none; }
+  .acciones .btn { padding: 8px 10px; min-width: 36px; }
+
+  .logo  { font-size: 22px; }
+  .vista { padding: 12px; }
+
+  /* Barra de sesión: más compacta */
+  .sesion { gap: 8px; margin-top: 8px; }
+
+  /* Partido: 2 filas, 3 columnas — layout correcto */
   .partido {
     grid-template-columns: 1fr auto 1fr;
     grid-template-areas:
-      "local stepper-l visit"
-      "local vs visit"
-      "local stepper-v visit"
-      "borrar borrar borrar";
+      "local vs   visit"
+      "sl    del  sv";
+    row-gap: 6px;
   }
-  .partido .lado-local { grid-area: local; }
-  .partido .lado-visit { grid-area: visit; }
-  .partido .vs { grid-area: vs; text-align: center; }
-  .partido .stepper:nth-of-type(1) { grid-area: stepper-l; }
-  .partido .stepper:nth-of-type(2) { grid-area: stepper-v; }
-  .partido .btn-borrar { grid-area: borrar; justify-self: end; }
+  .partido .lado-local               { grid-area: local; }
+  .partido .vs                       { grid-area: vs; text-align: center; align-self: center; }
+  .partido .lado-visit               { grid-area: visit; }
+  /* nth-of-type cuenta divs: local=1, stepper-local=2, stepper-visit=3, visit=4 */
+  .partido > div.stepper:nth-of-type(2) { grid-area: sl; justify-self: end; }
+  .partido > div.stepper:nth-of-type(3) { grid-area: sv; justify-self: start; }
+  .partido .btn-borrar               { grid-area: del; justify-self: center; align-self: center; }
+
+  /* Tabla grupo: ocultar PJ (redundante con G+E+P) */
+  .tabla-grupo th:nth-child(3),
+  .tabla-grupo td:nth-child(3) { display: none; }
   .tabla-grupo { font-size: 12px; }
+
+  /* Tabla terceros: ocultar GF en móvil */
+  .tabla-terceros th:nth-child(7),
+  .tabla-terceros td:nth-child(7) { display: none; }
+
+  /* Leaderboard: tabla con scroll horizontal */
+  .lb-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Admin barra: apilar verticalmente */
+  .admin-barra    { flex-direction: column; align-items: stretch; gap: 8px; }
+  .admin-acciones { margin-left: 0; }
+
+  /* Flujo pasos: más compactos */
+  .flujo-paso   { padding: 4px 8px; min-width: 64px; }
+  .flujo-label  { font-size: 11px; }
+  .flujo-detalle{ font-size: 10px; }
+
+  /* Login pasos: 1 columna en móvil */
+  .login-pasos { grid-template-columns: 1fr; }
+
+  /* Panel PIN y bloqueo */
+  .panel-pin    { padding: 24px 16px; margin: 16px auto; }
+  .panel-bloqueo{ padding: 24px 16px; margin: 16px auto; }
+
+  /* Bracket: columnas más angostas */
+  .bracket-col { min-width: 180px; }
+
+  /* Campeón */
   .campeon-titulo { font-size: 30px; letter-spacing: 2px; }
+}
+
+@media (max-width: 400px) {
+  .logo { font-size: 18px; gap: 6px; }
+  .logo-icon svg { width: 22px; height: 22px; }
+  .vista { padding: 8px; }
+  .tab  { padding: 10px 10px; font-size: 13px; }
+  .tarjeta-grupo { padding: 12px; }
 }
