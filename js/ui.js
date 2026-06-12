@@ -14,7 +14,11 @@ import {
   grupoCompleto,
 } from './standings.js';
 import { resolverBracket } from './bracket.js';
-import { listarQuinielas } from './api.js';
+import {
+  listarQuinielas, obtenerResultados, guardarResultados,
+  verificarPin, obtenerPuntuaciones,
+} from './api.js';
+import { PUNTOS, ETIQUETA_RONDA, PUNTOS_MAXIMOS } from './score.js';
 
 // --------- Helpers DOM ---------
 const $ = sel => document.querySelector(sel);
@@ -46,31 +50,34 @@ function bandera(eq, size = 'sm') {
   });
 }
 
-function stepper(partidoId, lado, valor, deshabilitado) {
+// Stepper genérico: `onCambio(valor)` recibe el nuevo valor crudo.
+// Lo usan tanto la quiniela (escribe en el estado) como la vista Admin
+// (escribe en el borrador de resultados reales).
+function stepperGenerico(etiqueta, valor, onCambio, deshabilitado) {
   const cont = el('div', {
     class: 'stepper' + (deshabilitado ? ' stepper-disabled' : ''),
-    role: 'group', 'aria-label': `Goles ${lado}`,
+    role: 'group', 'aria-label': `Goles ${etiqueta}`,
   });
   const dec = el('button', {
     type: 'button', class: 'stepper-btn',
     'aria-label': `Restar gol`, disabled: deshabilitado || false,
-    onclick: () => setMarcador(partidoId, lado, (valor ?? 0) - 1),
+    onclick: () => onCambio((valor ?? 0) - 1),
   }, '−');
   const input = el('input', {
     type: 'number', min: '0', max: '99', step: '1',
     inputmode: 'numeric', class: 'stepper-input',
     value: valor ?? '', placeholder: '–',
-    'aria-label': `Marcador ${lado}`, disabled: deshabilitado || false,
+    'aria-label': `Marcador ${etiqueta}`, disabled: deshabilitado || false,
   });
-  input.addEventListener('change', e => setMarcador(partidoId, lado, e.target.value));
+  input.addEventListener('change', e => onCambio(e.target.value));
   input.addEventListener('keydown', e => {
-    if (e.key === 'ArrowUp') { e.preventDefault(); setMarcador(partidoId, lado, (valor ?? 0) + 1); }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setMarcador(partidoId, lado, (valor ?? 0) - 1); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); onCambio((valor ?? 0) + 1); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); onCambio((valor ?? 0) - 1); }
   });
   const inc = el('button', {
     type: 'button', class: 'stepper-btn',
     'aria-label': `Sumar gol`, disabled: deshabilitado || false,
-    onclick: () => setMarcador(partidoId, lado, (valor ?? 0) + 1),
+    onclick: () => onCambio((valor ?? 0) + 1),
   }, '+');
   cont.append(dec, input, inc);
   return cont;
@@ -117,7 +124,8 @@ export function render() {
   cont.classList.add('fade-in');
   setTimeout(() => cont.classList.remove('fade-in'), 300);
 
-  if (estado.modoSoloLectura) {
+  // El banner solo aplica a vistas de predicción (en Resultados/Admin confunde).
+  if (estado.modoSoloLectura && !['resultados', 'admin', 'quinielas'].includes(vista)) {
     cont.appendChild(el('div', { class: 'banner-solo-lectura', role: 'status' },
       el('span', {}, '👁 Viendo la quiniela de ', el('strong', {}, estado.propietarioVisible)),
       el('button', { class: 'btn btn-claro', onclick: volverAMiQuiniela }, '← Volver a la mía'),
@@ -127,6 +135,8 @@ export function render() {
   if (vista === 'grupos') renderGrupos(cont);
   else if (vista === 'terceros') renderTerceros(cont);
   else if (vista === 'quinielas') renderQuinielas(cont);
+  else if (vista === 'resultados') renderResultados(cont);
+  else if (vista === 'admin') renderAdmin(cont);
   else if (vista === 'final') renderCampeon(cont);
   else renderRondaEliminatoria(cont, vista);
 }
@@ -254,7 +264,11 @@ function renderFlujoPasos() {
 
   // Actualizar la barra delgada de progreso (línea de fondo del header)
   const barEl = $('#progreso-bar');
-  if (barEl) barEl.style.width = gruposListo ? '100%' : `${(hechos / total) * 100}%`;
+  if (barEl) {
+    const pct = gruposListo ? 100 : Math.round((hechos / total) * 100);
+    barEl.style.width = `${pct}%`;
+    barEl.parentElement?.setAttribute('aria-valuenow', String(pct));
+  }
 
   // Renderizar los pasos en la nueva área
   let stepsEl = $('#flujo-pasos');
@@ -311,6 +325,8 @@ const VISTAS = [
   { id: 'semis',     etiqueta: 'Semis',     icono: null },
   { id: 'final',     etiqueta: 'Final',     icono: '🏆' },
   { id: 'quinielas', etiqueta: 'Quinielas', icono: '👥' },
+  { id: 'resultados', etiqueta: 'Resultados', icono: '🥇' },
+  { id: 'admin',     etiqueta: 'Admin',     icono: '🔐' },
 ];
 
 function tabInfoFn(vistaId) {
@@ -428,13 +444,18 @@ function renderGrupos(cont) {
   cont.appendChild(grid);
 }
 
-function renderTarjetaGrupo(grupo, tabla) {
+// `ctx` opcional permite reutilizar la tarjeta con otra fuente de datos
+// (la vista Admin edita los resultados reales, no la quiniela del usuario).
+function renderTarjetaGrupo(grupo, tabla, ctx = null) {
   const partidos = generarPartidosDeGrupo(grupo);
-  const ro = estado.modoSoloLectura;
+  const marcadores = ctx ? ctx.marcadores : estado.marcadores;
+  const ro = ctx ? !!ctx.ro : estado.modoSoloLectura;
+  const onMarcador = ctx ? ctx.onMarcador : setMarcador;
+  const onLimpiar = ctx ? ctx.onLimpiar : limpiarMarcador;
 
   // Calcular estado de completado del grupo (0-6 partidos)
   const completados = partidos.filter(p => {
-    const m = estado.marcadores[p.id];
+    const m = marcadores[p.id];
     return m && m.local != null && m.visitante != null;
   }).length;
   const total6 = partidos.length;
@@ -496,7 +517,7 @@ function renderTarjetaGrupo(grupo, tabla) {
   // Lista de partidos con resaltado de incompletos
   const lista = el('div', { class: 'lista-partidos' });
   for (const p of partidos) {
-    const m = estado.marcadores[p.id];
+    const m = marcadores[p.id] || { local: null, visitante: null };
     const eqL = EQUIPOS_POR_ID[p.localId];
     const eqV = EQUIPOS_POR_ID[p.visitanteId];
     const completo = m.local != null && m.visitante != null;
@@ -505,15 +526,15 @@ function renderTarjetaGrupo(grupo, tabla) {
     },
       el('div', { class: 'lado lado-local' },
         bandera(eqL), el('span', { class: 'nombre-eq' }, eqL.nombre)),
-      stepper(p.id, 'local', m.local, ro),
+      stepperGenerico('local', m.local, v => onMarcador(p.id, 'local', v), ro),
       el('span', { class: 'vs' }, completo ? `${m.local} – ${m.visitante}` : 'vs'),
-      stepper(p.id, 'visitante', m.visitante, ro),
+      stepperGenerico('visitante', m.visitante, v => onMarcador(p.id, 'visitante', v), ro),
       el('div', { class: 'lado lado-visit' },
         el('span', { class: 'nombre-eq' }, eqV.nombre), bandera(eqV)),
       ro ? null : el('button', {
         type: 'button', class: 'btn-borrar', title: 'Borrar marcador',
         'aria-label': `Borrar marcador ${eqL.nombre} vs ${eqV.nombre}`,
-        onclick: () => limpiarMarcador(p.id),
+        onclick: () => onLimpiar(p.id),
       }, '×'),
     ));
   }
@@ -593,6 +614,8 @@ async function renderQuinielas(cont) {
 
   try {
     const { quinielas } = await listarQuinielas();
+    // El usuario pudo cambiar de vista mientras cargaba: no pisar el DOM.
+    if (estado.vistaActual !== 'quinielas' || !wrap.isConnected) return;
     wrap.innerHTML = '';
     if (!quinielas.length) {
       wrap.appendChild(el('p', { class: 'vacio' }, 'Aún no hay otras quinielas guardadas.'));
@@ -624,6 +647,7 @@ async function renderQuinielas(cont) {
       ));
     }
   } catch (e) {
+    if (estado.vistaActual !== 'quinielas' || !wrap.isConnected) return;
     wrap.innerHTML = '';
     wrap.appendChild(el('p', { class: 'error' }, `Error al cargar: ${e.message}`));
   }
@@ -723,21 +747,23 @@ function panelBloqueo() {
   );
 }
 
-function renderTarjetaEliminatoria(partido) {
+// `onPick(matchId, equipoId, equipo)` opcional: por defecto escribe en la
+// quiniela del usuario; la vista Admin pasa su propio callback.
+function renderTarjetaEliminatoria(partido, onPick) {
   const { _home, _away, _ganador } = partido;
   const tarjeta = el('article', {
     class: 'tarjeta-elim' + (_ganador ? ' con-ganador' : ''),
     'aria-label': `Partido ${partido.id}`,
   });
   tarjeta.appendChild(el('div', { class: 'elim-id' }, partido.id));
-  tarjeta.appendChild(filaEquipoElim(partido, _home, _ganador));
-  tarjeta.appendChild(filaEquipoElim(partido, _away, _ganador));
+  tarjeta.appendChild(filaEquipoElim(partido, _home, _ganador, onPick));
+  tarjeta.appendChild(filaEquipoElim(partido, _away, _ganador, onPick));
   return tarjeta;
 }
 
-function filaEquipoElim(partido, equipo, ganador) {
+function filaEquipoElim(partido, equipo, ganador, onPick) {
   const esGanador = ganador && equipo && ganador.id === equipo.id;
-  const ro = estado.modoSoloLectura;
+  const ro = !onPick && estado.modoSoloLectura;
   const habilitado = !!equipo && !ro;
 
   const btn = el('button', {
@@ -745,8 +771,10 @@ function filaEquipoElim(partido, equipo, ganador) {
     class: 'elim-equipo' + (esGanador ? ' equipo-ganador' : '') + (equipo ? '' : ' elim-pendiente'),
     disabled: !habilitado,
     'aria-label': equipo ? `Seleccionar ${equipo.nombre} como ganador` : 'Equipo aún por definir',
+    'aria-pressed': esGanador ? 'true' : 'false',
     onclick: () => {
       if (!equipo || ro) return;
+      if (onPick) { onPick(partido.id, equipo.id, equipo); return; }
       setGanador(partido.id, equipo.id);
       toast(`${equipo.nombre} avanza ✓`, 'ok');
     },
@@ -796,6 +824,364 @@ function trofeoSVG() {
 }
 
 // =============================================================
+// VISTA: RESULTADOS — leaderboard contra los resultados reales
+// =============================================================
+
+function medalla(pos) {
+  return pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : null;
+}
+
+async function renderResultados(cont) {
+  cont.appendChild(el('section', { class: 'panel-info' },
+    el('h2', {}, '🥇 Leaderboard'),
+    el('p', {}, 'Puntos de cada quiniela contra los ', el('strong', {}, 'resultados reales'),
+      ' del torneo. Se actualiza conforme el admin captura los resultados.'),
+  ));
+
+  const wrap = el('div', { class: 'lb-wrap' });
+  wrap.appendChild(el('p', { class: 'cargando' }, 'Calculando puntuaciones…'));
+  cont.appendChild(wrap);
+
+  try {
+    const { puntuaciones, resultadosInfo } = await obtenerPuntuaciones();
+    if (estado.vistaActual !== 'resultados' || !wrap.isConnected) return;
+    wrap.innerHTML = '';
+
+    const hayResultados = resultadosInfo.partidosCapturados > 0 || resultadosInfo.ganadoresCapturados > 0;
+    const fechaInfo = resultadosInfo.actualizado
+      ? new Date(resultadosInfo.actualizado).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+      : null;
+
+    // Estado de captura de resultados oficiales
+    wrap.appendChild(el('div', { class: `hint-card ${hayResultados ? 'hint-card-info' : 'hint-card-warn'}` },
+      el('span', { class: 'hint-icono' }, hayResultados ? '📡' : '⏳'),
+      el('div', {},
+        hayResultados
+          ? el('span', {},
+              el('strong', {}, 'Resultados oficiales: '),
+              `${resultadosInfo.partidosCapturados}/72 partidos de grupos · `,
+              `${resultadosInfo.ganadoresCapturados} ganadores de eliminatorias`,
+              fechaInfo ? ` · última captura: ${fechaInfo}` : '')
+          : el('span', {},
+              el('strong', {}, 'Aún no hay resultados oficiales. '),
+              'Cuando el torneo avance, el admin capturará los marcadores reales en la tab Admin y aquí aparecerá el ranking.'),
+      ),
+    ));
+
+    if (!puntuaciones.length) {
+      wrap.appendChild(el('p', { class: 'vacio' }, 'Todavía no hay quinielas guardadas.'));
+      return;
+    }
+
+    // Podio (solo cuando ya hay puntos en juego)
+    if (hayResultados) {
+      const top = puntuaciones.filter(p => p.posicion <= 3).slice(0, 3);
+      const podio = el('div', { class: 'podio' });
+      for (const p of top) {
+        podio.appendChild(el('div', { class: `podio-card podio-${p.posicion}` + (p.nombre === estado.usuario ? ' podio-mio' : '') },
+          el('span', { class: 'podio-medalla', 'aria-hidden': 'true' }, medalla(p.posicion)),
+          el('span', { class: 'podio-nombre' }, p.nombre),
+          el('span', { class: 'podio-pts' }, `${p.total} pts`),
+        ));
+      }
+      wrap.appendChild(podio);
+    }
+
+    // Tabla de posiciones
+    wrap.appendChild(el('table', { class: 'tabla-lb', 'aria-label': 'Tabla de posiciones de la quiniela' },
+      el('thead', {}, el('tr', {},
+        el('th', {}, '#'),
+        el('th', { class: 'th-izq' }, 'Jugador'),
+        el('th', {}, 'Campeón'),
+        el('th', { title: 'Puntos de fase de grupos' }, 'Grupos'),
+        el('th', { title: 'Puntos del bracket eliminatorio' }, 'Bracket'),
+        el('th', {}, 'Total'),
+      )),
+      el('tbody', {}, puntuaciones.map(p => {
+        const esMio = p.nombre === estado.usuario;
+        const campeon = p.campeonId ? EQUIPOS_POR_ID[p.campeonId] : null;
+        const desgloseBracket = Object.entries(p.bracket.porRonda)
+          .filter(([, r]) => r.pts > 0)
+          .map(([ronda, r]) => `${ETIQUETA_RONDA[ronda]}: ${r.aciertos} aciertos = ${r.pts} pts`)
+          .join('\n');
+        return el('tr', { class: esMio ? 'fila-mia' : '' },
+          el('td', { class: 'lb-pos' }, (hayResultados && medalla(p.posicion)) || String(p.posicion)),
+          el('td', { class: 'th-izq' },
+            el('span', { class: 'lb-nombre' }, p.nombre),
+            esMio ? el('span', { class: 'badge badge-ok' }, 'Tú') : null),
+          el('td', {}, campeon
+            ? el('span', { class: 'lb-campeon', title: campeon.nombre }, bandera(campeon))
+            : el('span', { class: 'lb-sin-campeon', title: 'Bracket sin completar' }, '—')),
+          el('td', { title: `${p.grupos.exactos} exactos (5 pts) · ${p.grupos.resultados} resultados (2 pts) de ${p.grupos.evaluados} evaluados` },
+            String(p.grupos.pts)),
+          el('td', { title: desgloseBracket || 'Sin aciertos de bracket todavía' }, String(p.bracket.pts)),
+          el('td', { class: 'lb-total' }, String(p.total)),
+        );
+      })),
+    ));
+
+    // Reglas de puntuación (colapsable)
+    wrap.appendChild(el('details', { class: 'lb-reglas' },
+      el('summary', {}, '¿Cómo se calculan los puntos?'),
+      el('div', { class: 'lb-reglas-cuerpo' },
+        el('p', {}, el('strong', {}, 'Fase de grupos (por partido): '),
+          `marcador exacto ${PUNTOS.exacto} pts · resultado correcto (gana/empata/pierde) ${PUNTOS.resultado} pts.`),
+        el('p', {}, el('strong', {}, 'Eliminatorias (por equipo que avanza correctamente): '),
+          Object.entries(PUNTOS.rondas).map(([r, v]) => `${ETIQUETA_RONDA[r]} ${v} pts`).join(' · ') + '.'),
+        el('p', {}, `Puntuación máxima teórica: ${PUNTOS_MAXIMOS} pts. `,
+          'En caso de empate gana quien tenga más marcadores exactos.'),
+      ),
+    ));
+  } catch (e) {
+    if (estado.vistaActual !== 'resultados' || !wrap.isConnected) return;
+    wrap.innerHTML = '';
+    wrap.appendChild(el('p', { class: 'error' }, `Error al cargar el leaderboard: ${e.message}`));
+  }
+}
+
+// =============================================================
+// VISTA: ADMIN — captura de resultados reales (PIN)
+// =============================================================
+
+const CLAVE_PIN = 'quiniela-mundial-2026:admin-pin';
+let adminDraft = null;     // { marcadores, eliminatorias } — borrador local
+let adminDirty = false;    // hay cambios sin guardar
+let adminCargando = false; // evita fetches duplicados al re-renderizar
+
+function marcadoresRealesVacios() {
+  const m = {};
+  for (const g of GRUPOS) {
+    for (const p of generarPartidosDeGrupo(g)) m[p.id] = { local: null, visitante: null };
+  }
+  return m;
+}
+
+function renderAdmin(cont) {
+  const pin = sessionStorage.getItem(CLAVE_PIN);
+  if (!pin) { renderAdminPin(cont); return; }
+  if (!adminDraft) { cargarBorradorAdmin(cont); return; }
+  renderAdminEditor(cont, pin);
+}
+
+function renderAdminPin(cont) {
+  const inp = el('input', {
+    id: 'pin-input', class: 'login-input', type: 'password',
+    inputmode: 'numeric', autocomplete: 'off',
+    placeholder: '····', maxlength: '20', required: 'required',
+  });
+  const msg = el('p', { class: 'pin-error', role: 'alert', hidden: 'hidden' });
+  const btn = el('button', { type: 'submit', class: 'btn btn-grande' }, 'Entrar al panel');
+
+  cont.appendChild(el('section', { class: 'panel-pin' },
+    el('div', { class: 'pin-icono', 'aria-hidden': 'true' }, '🔐'),
+    el('h2', {}, 'Panel de administración'),
+    el('p', { class: 'pin-sub' }, 'Aquí se capturan los ', el('strong', {}, 'resultados reales'),
+      ' del torneo. Solo el organizador necesita entrar; el leaderboard es público en la tab Resultados.'),
+    el('form', {
+      class: 'login-form',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const pin = inp.value.trim();
+        if (!pin) { inp.focus(); return; }
+        btn.disabled = true; btn.textContent = 'Verificando…';
+        try {
+          const ok = await verificarPin(pin);
+          if (ok) {
+            sessionStorage.setItem(CLAVE_PIN, pin);
+            toast('PIN correcto. Bienvenido, admin', 'ok');
+            render();
+          } else {
+            msg.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
+            msg.hidden = false;
+            inp.value = ''; inp.focus();
+            btn.disabled = false; btn.textContent = 'Entrar al panel';
+          }
+        } catch {
+          msg.textContent = 'No se pudo verificar el PIN (¿servidor caído?).';
+          msg.hidden = false;
+          btn.disabled = false; btn.textContent = 'Entrar al panel';
+        }
+      },
+    },
+      el('label', { class: 'login-label', for: 'pin-input' }, 'PIN de admin'),
+      inp, msg, btn,
+    ),
+  ));
+  setTimeout(() => inp.focus(), 50);
+}
+
+function cargarBorradorAdmin(cont) {
+  cont.appendChild(el('p', { class: 'cargando' }, 'Cargando resultados oficiales…'));
+  if (adminCargando) return;
+  adminCargando = true;
+  obtenerResultados()
+    .then(data => {
+      adminDraft = {
+        marcadores: { ...marcadoresRealesVacios(), ...(data?.marcadores || {}) },
+        eliminatorias: data?.eliminatorias || {},
+      };
+      adminDirty = false;
+      if (estado.vistaActual === 'admin') render();
+    })
+    .catch(e => {
+      if (estado.vistaActual !== 'admin' || !cont.isConnected) return;
+      cont.innerHTML = '';
+      cont.appendChild(el('p', { class: 'error' }, `Error al cargar resultados: ${e.message}`));
+    })
+    .finally(() => { adminCargando = false; });
+}
+
+function setMarcadorAdmin(partidoId, lado, valor) {
+  // '' o valores inválidos limpian la casilla (a diferencia de la quiniela,
+  // aquí "sin dato" significa que el partido aún no se juega).
+  let v = valor === '' || valor == null ? null : Number(valor);
+  if (v != null && (!Number.isFinite(v) || v < 0)) v = 0;
+  if (v != null) v = Math.min(Math.round(v), 99);
+  adminDraft.marcadores[partidoId][lado] = v;
+  adminDirty = true;
+  render();
+}
+
+function limpiarMarcadorAdmin(partidoId) {
+  adminDraft.marcadores[partidoId] = { local: null, visitante: null };
+  adminDirty = true;
+  render();
+}
+
+function setGanadorAdmin(matchId, equipoId, equipo) {
+  const actual = adminDraft.eliminatorias[matchId]?.ganadorId;
+  if (!adminDraft.eliminatorias[matchId]) adminDraft.eliminatorias[matchId] = { ganadorId: null };
+  // Clic sobre el ganador actual lo deselecciona (corrección rápida).
+  adminDraft.eliminatorias[matchId].ganadorId = actual === equipoId ? null : equipoId;
+  adminDirty = true;
+  if (actual !== equipoId) toast(`${equipo.nombre} avanza (resultado real) ✓`, 'ok');
+  render();
+}
+
+async function guardarBorradorAdmin(pin) {
+  try {
+    await guardarResultados(adminDraft, pin);
+    adminDirty = false;
+    toast('Resultados oficiales guardados', 'ok');
+    render();
+  } catch (e) {
+    if (e.status === 401) {
+      sessionStorage.removeItem(CLAVE_PIN);
+      toast('PIN rechazado por el servidor. Vuelve a ingresarlo.', 'error');
+      render(); // el borrador se conserva: tras re-autenticar puede guardar
+    } else {
+      toast(`Error al guardar: ${e.message}`, 'error');
+    }
+  }
+}
+
+function renderAdminEditor(cont, pin) {
+  cont.appendChild(el('div', { class: 'hint-card hint-card-warn' },
+    el('span', { class: 'hint-icono' }, '⚠️'),
+    el('div', {},
+      el('strong', {}, 'Estás editando los resultados REALES del torneo. '),
+      el('span', {}, 'Esto afecta la puntuación de todas las quinielas. Captura solo partidos ya jugados y pulsa '),
+      el('strong', {}, 'Guardar'), el('span', {}, ' al terminar.'),
+    ),
+  ));
+
+  // Barra de acciones del admin (sticky)
+  const { hechos, total } = progresoGrupos(adminDraft.marcadores);
+  cont.appendChild(el('div', { class: 'admin-barra' },
+    el('span', { class: 'admin-estado' + (adminDirty ? ' admin-estado-dirty' : '') },
+      adminDirty ? '● Cambios sin guardar' : '✓ Sin cambios pendientes'),
+    el('span', { class: 'admin-progreso' }, `${hechos}/${total} partidos capturados`),
+    el('div', { class: 'admin-acciones' },
+      el('button', {
+        class: 'btn', disabled: !adminDirty,
+        onclick: () => guardarBorradorAdmin(pin),
+      }, '💾 Guardar resultados'),
+      el('button', {
+        class: 'btn btn-claro',
+        onclick: () => {
+          if (!adminDirty || confirm('¿Descartar los cambios sin guardar y recargar lo último guardado?')) {
+            adminDraft = null;
+            adminDirty = false;
+            render();
+          }
+        },
+      }, 'Descartar'),
+      el('button', {
+        class: 'btn btn-claro',
+        onclick: () => {
+          if (adminDirty && !confirm('Tienes cambios sin guardar. ¿Salir de todas formas?')) return;
+          sessionStorage.removeItem(CLAVE_PIN);
+          adminDraft = null;
+          adminDirty = false;
+          setVista('resultados');
+        },
+      }, 'Salir de admin'),
+    ),
+  ));
+
+  const ctx = {
+    marcadores: adminDraft.marcadores,
+    onMarcador: setMarcadorAdmin,
+    onLimpiar: limpiarMarcadorAdmin,
+    ro: false,
+  };
+
+  // --- Fase de grupos (resultados reales) ---
+  cont.appendChild(el('section', { class: 'panel-info' },
+    el('h2', {}, '⚽ Fase de grupos — marcadores reales'),
+    el('p', {}, 'Las tablas se calculan con los resultados capturados y definen el bracket real.'),
+  ));
+  const tablas = calcularTodo(adminDraft.marcadores);
+  const grid = el('div', { class: 'grid-grupos' });
+  for (const g of GRUPOS) grid.appendChild(renderTarjetaGrupo(g, tablas[g], ctx));
+  cont.appendChild(grid);
+
+  // --- Eliminatorias (ganadores reales) ---
+  cont.appendChild(el('section', { class: 'panel-info' },
+    el('h2', {}, '🏟 Eliminatorias — ganadores reales'),
+    el('p', {}, 'Haz clic en el equipo que ganó cada cruce. Clic de nuevo sobre el ganador lo deselecciona. ',
+      'Los cruces se desbloquean cuando los grupos involucrados están completos.'),
+  ));
+
+  const terceros = rankingTerceros(tablas);
+  const resuelto = resolverBracket(tablas, terceros, adminDraft.eliminatorias);
+  const wrapper = el('div', { class: 'bracket-wrapper' });
+  const tablero = el('div', { class: 'bracket' });
+  const rondas = [
+    { key: 'r32',     titulo: 'Ronda de 32' },
+    { key: 'r16',     titulo: 'Octavos de Final' },
+    { key: 'cuartos', titulo: 'Cuartos de Final' },
+    { key: 'semis',   titulo: 'Semifinales' },
+    { key: 'final',   titulo: 'Final' },
+  ];
+  for (const r of rondas) {
+    const col = el('div', { class: 'bracket-col', dataset: { ronda: r.key } });
+    col.appendChild(el('h3', { class: 'bracket-col-titulo' }, r.titulo));
+    for (const partido of resuelto[r.key]) {
+      col.appendChild(renderTarjetaEliminatoria(partido, setGanadorAdmin));
+    }
+    tablero.appendChild(col);
+  }
+  wrapper.appendChild(tablero);
+  cont.appendChild(wrapper);
+
+  cont.appendChild(el('section', { class: 'panel-info' }, el('h3', {}, '🥉 Partido por el tercer puesto')));
+  const cont3 = el('div', { class: 'bracket' });
+  const col3 = el('div', { class: 'bracket-col' });
+  col3.appendChild(renderTarjetaEliminatoria(resuelto.tercerPuesto[0], setGanadorAdmin));
+  cont3.appendChild(col3);
+  cont.appendChild(cont3);
+
+  // Guardado siempre a la mano aunque se esté al fondo de la captura.
+  if (adminDirty) {
+    cont.appendChild(el('button', {
+      class: 'btn admin-guardar-flotante',
+      onclick: () => guardarBorradorAdmin(pin),
+    }, '💾 Guardar resultados'));
+  }
+}
+
+// =============================================================
 // BARRA DE ACCIONES
 // =============================================================
 
@@ -827,5 +1213,10 @@ export function bindBarraAcciones() {
     document.documentElement.dataset.tema = actual;
     localStorage.setItem('quiniela-tema', actual);
     toast(`Modo ${actual}`, 'info');
+  });
+
+  // Evita perder resultados oficiales a medio capturar al cerrar la pestaña.
+  window.addEventListener('beforeunload', (e) => {
+    if (adminDirty) { e.preventDefault(); e.returnValue = ''; }
   });
 }

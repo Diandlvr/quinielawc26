@@ -701,6 +701,7 @@ html[data-tema="oscuro"] .panel-bloqueo h2 { color: var(--c-amarillo); }
 }
 .toast-ok { background: var(--c-verde); }
 .toast-info { background: var(--c-azul); }
+.toast-error { background: var(--c-rojo); }
 
 /* ================================================================
    PIE
@@ -1254,6 +1255,167 @@ html[data-tema="oscuro"] .tarjeta-mia {
 /* Stepper deshabilitado en modo solo-lectura */
 .stepper-disabled { opacity: .7; }
 .stepper-input:disabled { cursor: not-allowed; }
+
+/* ================================================================
+   LEADERBOARD (vista Resultados)
+================================================================ */
+.podio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.podio-card {
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio);
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--sombra-1);
+}
+.podio-1 {
+  border-color: var(--c-amarillo);
+  box-shadow: 0 0 0 1px var(--c-amarillo), var(--sombra-2);
+  background: linear-gradient(180deg, rgba(255,210,76,.12), var(--c-superficie));
+}
+.podio-2 { border-color: #b8c4d4; }
+.podio-3 { border-color: #d8a06a; }
+.podio-mio { outline: 2px dashed var(--c-azul); outline-offset: 2px; }
+html[data-tema="oscuro"] .podio-mio { outline-color: var(--c-amarillo); }
+.podio-medalla { font-size: 32px; line-height: 1; }
+.podio-nombre {
+  font-weight: 700;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.podio-pts {
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 1px;
+  color: var(--c-azul);
+}
+html[data-tema="oscuro"] .podio-pts { color: var(--c-amarillo); }
+
+.tabla-lb {
+  width: 100%;
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+  box-shadow: var(--sombra-1);
+  font-size: 14px;
+}
+.tabla-lb th, .tabla-lb td {
+  padding: 10px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--c-borde);
+}
+.tabla-lb th { background: var(--c-superficie-2); color: var(--c-texto-2); font-weight: 600; }
+.tabla-lb .th-izq { text-align: left; }
+.tabla-lb .lb-pos { font-size: 16px; font-weight: 700; }
+.tabla-lb .lb-nombre { font-weight: 600; margin-right: 8px; }
+.tabla-lb .lb-total {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--c-azul);
+}
+html[data-tema="oscuro"] .tabla-lb .lb-total { color: var(--c-amarillo); }
+.tabla-lb tr.fila-mia { background: rgba(255,210,76,.12); }
+.tabla-lb .lb-campeon .bandera { margin: 0 auto; }
+.tabla-lb .lb-sin-campeon { color: var(--c-texto-debil); }
+
+.lb-reglas {
+  margin-top: 16px;
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio);
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--c-texto-2);
+}
+.lb-reglas summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--c-texto);
+}
+.lb-reglas-cuerpo { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.lb-reglas-cuerpo p { margin: 0; }
+
+/* ================================================================
+   ADMIN — PIN y barra de captura
+================================================================ */
+.panel-pin {
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio);
+  padding: 32px 28px;
+  max-width: 420px;
+  margin: 32px auto;
+  text-align: center;
+  box-shadow: var(--sombra-2);
+}
+.pin-icono { font-size: 40px; margin-bottom: 8px; }
+.panel-pin h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  letter-spacing: 1.5px;
+  color: var(--c-azul);
+}
+html[data-tema="oscuro"] .panel-pin h2 { color: var(--c-amarillo); }
+.pin-sub { color: var(--c-texto-2); font-size: 14px; margin: 0 0 20px; }
+.pin-error {
+  margin: 0;
+  color: var(--c-rojo);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-barra {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--c-superficie);
+  border: 1px solid var(--c-borde);
+  border-radius: var(--radio-sm);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  box-shadow: var(--sombra-2);
+  font-size: 14px;
+}
+.admin-estado { font-weight: 600; color: var(--c-verde); }
+.admin-estado-dirty { color: var(--c-naranja); }
+.admin-progreso { color: var(--c-texto-2); font-size: 13px; }
+.admin-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.admin-barra .btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Botón flotante de guardado: visible mientras haya cambios sin guardar,
+   sin importar cuánto se haya scrolleado en la captura. */
+.admin-guardar-flotante {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  padding: 12px 18px;
+  font-size: 15px;
+  box-shadow: var(--sombra-3);
+}
+.admin-guardar-flotante:hover { transform: translateY(-2px); }
 
 /* ================================================================
    AJUSTES MOBILE

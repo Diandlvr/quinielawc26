@@ -37,3 +37,31 @@ export function guardarQuiniela(nombre, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+// ---------- Resultados reales y puntuación ----------
+
+export function obtenerResultados() {
+  return pedir('/api/resultados');
+}
+
+export function guardarResultados(payload, pin) {
+  return pedir('/api/resultados', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Pin': pin },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function verificarPin(pin) {
+  try {
+    await pedir('/api/admin/verificar', { headers: { 'X-Admin-Pin': pin } });
+    return true;
+  } catch (e) {
+    if (e.status === 401) return false;
+    throw e;
+  }
+}
+
+export function obtenerPuntuaciones() {
+  return pedir('/api/puntuaciones');
+}

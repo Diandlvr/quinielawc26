@@ -25,17 +25,17 @@ bindBarraAcciones();
   render();
 })();
 
-// Navegación entre tabs con flechas izq/der
+// Navegación entre tabs con flechas izq/der (salta las deshabilitadas)
 document.addEventListener('keydown', (e) => {
   if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
   if (e.target.matches('input, button, [contenteditable]')) return;
   const tabs = [...document.querySelectorAll('#tabs .tab')];
   const idx = tabs.findIndex(t => t.classList.contains('tab-activa'));
   if (idx < 0) return;
-  const nuevo = e.key === 'ArrowRight'
-    ? Math.min(tabs.length - 1, idx + 1)
-    : Math.max(0, idx - 1);
-  tabs[nuevo].click();
+  const paso = e.key === 'ArrowRight' ? 1 : -1;
+  let nuevo = idx + paso;
+  while (nuevo >= 0 && nuevo < tabs.length && tabs[nuevo].disabled) nuevo += paso;
+  if (nuevo >= 0 && nuevo < tabs.length) tabs[nuevo].click();
 });
 
 window.__quiniela__ = { estado };

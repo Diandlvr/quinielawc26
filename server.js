@@ -6,18 +6,25 @@
 //   GET  /api/quinielas              -> lista de nombres + metadata
 //   GET  /api/quiniela/:nombre       -> quiniela completa de un usuario
 //   PUT  /api/quiniela/:nombre       -> guarda la quiniela de un usuario
+//   GET  /api/resultados             -> resultados reales del torneo
+//   PUT  /api/resultados             -> guarda resultados (header X-Admin-Pin)
+//   GET  /api/admin/verificar        -> valida el PIN de admin (header X-Admin-Pin)
+//   GET  /api/puntuaciones           -> leaderboard calculado de todas las quinielas
 //
-// Persistencia: archivo data/quinielas.json
+// Persistencia: archivos data/quinielas.json y data/resultados.json
 // =============================================================
 
 import { createServer } from 'node:http';
 import { readFile, writeFile, stat, mkdir } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { calcularLeaderboard } from './js/score.js';
 
 const PUERTO = Number(process.env.PORT) || 8000;
 const RAIZ = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const RUTA_DATOS = join(RAIZ, 'data', 'quinielas.json');
+const RUTA_RESULTADOS = join(RAIZ, 'data', 'resultados.json');
+const ADMIN_PIN = process.env.ADMIN_PIN || '2026';
 
 // Tipos MIME para los archivos estáticos.
 const MIME = {
@@ -44,19 +51,40 @@ const MIME = {
 // (lectura-modificación-escritura sobre el mismo archivo).
 let colaEscritura = Promise.resolve();
 
-async function leerQuinielas() {
+async function leerJSON(ruta, porDefecto = {}) {
   try {
-    const txt = await readFile(RUTA_DATOS, 'utf-8');
+    const txt = await readFile(ruta, 'utf-8');
     return JSON.parse(txt);
   } catch (e) {
-    if (e.code === 'ENOENT') return {};
+    if (e.code === 'ENOENT') return porDefecto;
     throw e;
   }
 }
 
-async function escribirQuinielas(obj) {
-  await mkdir(dirname(RUTA_DATOS), { recursive: true });
-  await writeFile(RUTA_DATOS, JSON.stringify(obj, null, 2), 'utf-8');
+async function escribirJSON(ruta, obj) {
+  await mkdir(dirname(ruta), { recursive: true });
+  await writeFile(ruta, JSON.stringify(obj, null, 2), 'utf-8');
+}
+
+const leerQuinielas = () => leerJSON(RUTA_DATOS);
+const leerResultados = () => leerJSON(RUTA_RESULTADOS, { marcadores: {}, eliminatorias: {}, actualizado: null });
+
+// Sanea el payload de una quiniela/resultados: solo conserva marcadores con
+// enteros 0-99 (o null) y eliminatorias con ganadorId string (o null).
+function sanearPayload(payload = {}) {
+  const marcadores = {};
+  for (const [id, m] of Object.entries(payload.marcadores || {})) {
+    if (typeof id !== 'string' || id.length > 40 || !m || typeof m !== 'object') continue;
+    const gol = v => (Number.isInteger(v) && v >= 0 && v <= 99) ? v : null;
+    marcadores[id] = { local: gol(m.local), visitante: gol(m.visitante) };
+  }
+  const eliminatorias = {};
+  for (const [id, e] of Object.entries(payload.eliminatorias || {})) {
+    if (typeof id !== 'string' || id.length > 20 || !e || typeof e !== 'object') continue;
+    const g = e.ganadorId;
+    eliminatorias[id] = { ganadorId: (typeof g === 'string' && g.length <= 20) ? g : null };
+  }
+  return { marcadores, eliminatorias };
 }
 
 function actualizarUsuario(nombre, payload) {
@@ -64,12 +92,23 @@ function actualizarUsuario(nombre, payload) {
   colaEscritura = colaEscritura.then(async () => {
     const datos = await leerQuinielas();
     datos[nombre] = {
-      marcadores: payload.marcadores || {},
-      eliminatorias: payload.eliminatorias || {},
+      ...sanearPayload(payload),
       actualizado: new Date().toISOString(),
     };
-    await escribirQuinielas(datos);
+    await escribirJSON(RUTA_DATOS, datos);
     return datos[nombre];
+  });
+  return colaEscritura;
+}
+
+function actualizarResultados(payload) {
+  colaEscritura = colaEscritura.then(async () => {
+    const datos = {
+      ...sanearPayload(payload),
+      actualizado: new Date().toISOString(),
+    };
+    await escribirJSON(RUTA_RESULTADOS, datos);
+    return datos;
   });
   return colaEscritura;
 }
@@ -121,8 +160,49 @@ function normalizarNombre(crudo) {
   return n;
 }
 
+function pinValido(req) {
+  const pin = req.headers['x-admin-pin'];
+  return typeof pin === 'string' && pin === ADMIN_PIN;
+}
+
 // ---------- Rutas API ----------
 async function manejarAPI(req, res, ruta) {
+  // GET /api/resultados -> resultados reales (lectura pública)
+  if (req.method === 'GET' && ruta === '/api/resultados') {
+    return json(res, 200, await leerResultados());
+  }
+
+  // PUT /api/resultados -> guarda resultados (requiere PIN de admin)
+  if (req.method === 'PUT' && ruta === '/api/resultados') {
+    if (!pinValido(req)) return json(res, 401, { error: 'PIN de admin incorrecto' });
+    let payload;
+    try { payload = await leerCuerpoJSON(req); }
+    catch { return json(res, 400, { error: 'JSON inválido o demasiado grande' }); }
+    const guardado = await actualizarResultados(payload);
+    return json(res, 200, guardado);
+  }
+
+  // GET /api/admin/verificar -> valida el PIN sin guardar nada
+  if (req.method === 'GET' && ruta === '/api/admin/verificar') {
+    if (!pinValido(req)) return json(res, 401, { error: 'PIN de admin incorrecto' });
+    return json(res, 200, { ok: true });
+  }
+
+  // GET /api/puntuaciones -> leaderboard calculado en el servidor
+  if (req.method === 'GET' && ruta === '/api/puntuaciones') {
+    const [quinielas, resultados] = await Promise.all([leerQuinielas(), leerResultados()]);
+    const puntuaciones = calcularLeaderboard(quinielas, resultados);
+    return json(res, 200, {
+      puntuaciones,
+      resultadosInfo: {
+        partidosCapturados: contarPartidosCompletados(resultados.marcadores),
+        ganadoresCapturados: Object.values(resultados.eliminatorias || {})
+          .filter(e => e && e.ganadorId).length,
+        actualizado: resultados.actualizado || null,
+      },
+    });
+  }
+
   // GET /api/quinielas -> lista de nombres + metadata
   if (req.method === 'GET' && ruta === '/api/quinielas') {
     const datos = await leerQuinielas();
@@ -212,15 +292,18 @@ async function manejar(req, res) {
   try {
     const url = new URL(req.url, 'http://x');
     if (url.pathname.startsWith('/api/')) {
-      return manejarAPI(req, res, url.pathname);
+      // `await` es necesario: sin él, un error dentro del handler no caería
+      // en este catch y la petición quedaría colgada sin respuesta.
+      return await manejarAPI(req, res, url.pathname);
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405); res.end('Método no permitido'); return;
     }
-    return manejarEstatico(req, res);
+    return await manejarEstatico(req, res);
   } catch (e) {
     console.error('Error inesperado', e);
-    res.writeHead(500); res.end('Error interno');
+    if (!res.headersSent) res.writeHead(500);
+    res.end('Error interno');
   }
 }
 
@@ -228,5 +311,9 @@ createServer(manejar).listen(PUERTO, () => {
   console.log(`\n  ⚽ Quiniela del Mundial 2026`);
   console.log(`  Sirviendo desde: ${RAIZ}`);
   console.log(`  Datos en:        ${RUTA_DATOS}`);
+  if (!process.env.ADMIN_PIN) {
+    console.log(`  ⚠ ADMIN_PIN no configurado — usando el PIN por defecto "2026".`);
+    console.log(`    Define la variable de entorno ADMIN_PIN para cambiarlo.`);
+  }
   console.log(`  Abre tu navegador en: http://localhost:${PUERTO}\n`);
 });
